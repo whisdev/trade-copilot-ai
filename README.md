@@ -1,4 +1,4 @@
-# TraderChat AI
+# Trade Copilot AI
 
 ![Dashboard](dashboard.png)
 
