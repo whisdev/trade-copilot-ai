@@ -1,0 +1,16 @@
+# Python / Backend
+.venv
+venv
+__pycache__
+*.py[cod]
+.env
+*.db
+
+# Node / Frontend
+node_modules
+dist
+dist-ssr
+
+# Logs and misc
+*.log
+.DS_Store
