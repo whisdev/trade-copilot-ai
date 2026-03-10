@@ -1,4 +1,4 @@
-"""Chutes provider for chat completion and scoring. Uses Qwen/Qwen3-32B."""
+"""OpenRouter provider for chat completion and scoring."""
 
 import httpx
 from app.config import settings
@@ -6,23 +6,24 @@ from app.prompts import get_system_prompt
 
 
 def _check_api_key():
-    key = (settings.chutes_api_key or "").strip()
+    key = (settings.openrouter_api_key or "").strip()
     if not key:
         raise ValueError(
-            "CHUTES_API_KEY is missing. "
-            "Get a key at https://chutes.ai and set it in backend/.env"
+            "OPENROUTER_API_KEY is missing. "
+            "Get a key at https://openrouter.ai/keys and set it in backend/.env"
         )
 
 
-def _chutes_headers() -> dict:
+def _openrouter_headers() -> dict:
     return {
-        "Authorization": f"Bearer {settings.chutes_api_key.strip()}",
+        "Authorization": f"Bearer {settings.openrouter_api_key.strip()}",
         "Content-Type": "application/json",
+        "HTTP-Referer": "https://github.com/whisdev/traderchat_ai",
     }
 
 
 async def chat_completion(messages: list[dict], social: str, channel_type: str) -> str:
-    """Call Chutes chat completion. messages: [{"role": "user"|"assistant"|"system", "content": "..."}]"""
+    """Call OpenRouter chat completion. messages: [{"role": "user"|"assistant"|"system", "content": "..."}]"""
     _check_api_key()
     system = get_system_prompt(social, channel_type)
     if not messages or messages[0].get("role") != "system":
@@ -33,13 +34,13 @@ async def chat_completion(messages: list[dict], social: str, channel_type: str) 
     try:
         async with httpx.AsyncClient() as client:
             r = await client.post(
-                f"{settings.chutes_base_url}/chat/completions",
-                headers=_chutes_headers(),
+                f"{settings.openrouter_base_url}/chat/completions",
+                headers=_openrouter_headers(),
                 json={
-                    "model": settings.chutes_model,
+                    "model": settings.openrouter_model,
                     "messages": messages,
-                    "max_tokens": settings.chutes_max_tokens,
-                    "temperature": settings.chutes_temperature,
+                    "max_tokens": settings.openrouter_max_tokens,
+                    "temperature": settings.openrouter_temperature,
                     "stream": False,
                 },
                 timeout=120.0,
@@ -47,13 +48,13 @@ async def chat_completion(messages: list[dict], social: str, channel_type: str) 
             r.raise_for_status()
             data = r.json()
     except httpx.HTTPStatusError as e:
-        print(f"Chutes API error: {e.response.status_code} - {e.response.text}")
+        print(f"OpenRouter API error: {e.response.status_code} - {e.response.text}")
         raise
     except httpx.RequestError as e:
-        print(f"Chutes request failed: {e}")
+        print(f"OpenRouter request failed: {e}")
         raise
     except Exception as e:
-        print(f"Chutes chat_completion error: {e}")
+        print(f"OpenRouter chat_completion error: {e}")
         raise
 
     choice = data.get("choices", [{}])[0]
@@ -83,10 +84,10 @@ async def score_attractiveness(user_msg: str, assistant_msg: str) -> int:
     ]
     async with httpx.AsyncClient() as client:
         r = await client.post(
-            f"{settings.chutes_base_url}/chat/completions",
-            headers=_chutes_headers(),
+            f"{settings.openrouter_base_url}/chat/completions",
+            headers=_openrouter_headers(),
             json={
-                "model": settings.chutes_model,
+                "model": settings.openrouter_model,
                 "messages": messages,
                 "max_tokens": 16,
                 "temperature": 0.3,

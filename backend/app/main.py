@@ -143,7 +143,7 @@ async def send_message(
         if e.response.status_code == 401:
             raise HTTPException(
                 503,
-                "Chutes API key invalid. Set CHUTES_API_KEY in backend/.env (get one at https://chutes.ai)",
+                "OpenRouter API key invalid. Set OPENROUTER_API_KEY in backend/.env (get one at https://openrouter.ai/keys)",
             )
         raise HTTPException(503, f"Chutes error: {e.response.text[:200]}")
     # Persist assistant message with score
