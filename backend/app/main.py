@@ -136,6 +136,6 @@ async def send_message(
                 503,
                 "OpenAI API key invalid. Set OPENAI_API_KEY in backend/.env (get one at https://platform.openai.com/api-keys)",
             )
-        raise HTTPException(503, f"Chutes error: {e.response.text[:200]}")
+        raise HTTPException(503, f"Open AI API error: {e.response.text[:200]}")
     await add_message(db, chat_id, "assistant", assistant_content, attract_score=score)
     return SendMessageResponse(assistant_message=assistant_content, attract_score=score)

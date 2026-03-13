@@ -78,8 +78,7 @@ async def chat_completion(messages: list[dict], social: str, channel_type: str) 
             {
                 "model": settings.openai_model,
                 "messages": messages,
-                "max_tokens": settings.openai_max_tokens,
-                "temperature": settings.openai_temperature,
+                "max_completion_tokens": settings.openai_max_tokens,
                 "stream": False,
             },
             timeout=120.0,
@@ -121,8 +120,7 @@ async def score_attractiveness(user_msg: str, assistant_msg: str) -> int:
         {
             "model": settings.openai_model,
             "messages": messages,
-            "max_tokens": 16,
-            "temperature": 0.3,
+            "max_completion_tokens": 16,
             "stream": False,
         },
         timeout=60.0,
