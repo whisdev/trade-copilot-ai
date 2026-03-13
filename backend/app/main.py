@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel
 
+from app.config import settings
 from app.database import get_db, init_db
 from app.crud import create_chat, get_chats, get_chat_by_id, get_messages, add_message, delete_chat, update_chat_username
 from app.llm import chat_completion, score_attractiveness
@@ -19,7 +20,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Chatting App API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=settings.get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

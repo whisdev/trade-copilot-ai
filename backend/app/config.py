@@ -17,6 +17,14 @@ class Settings(BaseSettings):
     openai_model: str = Field(default="gpt-4o-mini", validation_alias="OPENAI_MODEL")
     openai_max_tokens: int = 1024
     openai_temperature: float = 0.7
+    cors_origins: str = Field(
+        default="http://localhost:5173,http://127.0.0.1:5173",
+        validation_alias="CORS_ORIGINS",
+    )
+
+    def get_cors_origins(self) -> list[str]:
+        origins = [o.strip() for o in (self.cors_origins or "").split(",") if o.strip()]
+        return origins if origins else ["http://localhost:5173", "http://127.0.0.1:5173"]
 
     def get_openai_key_list(self) -> list[str]:
         """Return list of API keys. OPENAI_API_KEYS (comma-separated) takes precedence over OPENAI_API_KEY."""

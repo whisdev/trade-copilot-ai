@@ -1,4 +1,5 @@
-const API = '/api';
+// In dev: /api (Vite proxy). In prod: set VITE_API_URL to backend URL (e.g. http://localhost:8000)
+const API = import.meta.env.VITE_API_URL || '/api';
 
 export async function getChats() {
   const r = await fetch(`${API}/chats`);

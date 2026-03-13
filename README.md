@@ -37,6 +37,20 @@ npm run dev
 
 Hit http://localhost:5173. API calls are proxied to `http://127.0.0.1:8000`.
 
+### Production (PM2)
+
+When serving the built frontend (no Vite proxy), set the backend URL before building:
+
+```bash
+cd frontend
+cp .env.production.example .env.production
+# Edit .env.production: VITE_API_URL=http://localhost:8000  (or your backend URL)
+npm run build
+pm2 start "npx serve -s dist -l 5173" --name trade-copilot-frontend
+```
+
+**"Failed to fetch"** — Add your frontend URL to backend `CORS_ORIGINS` in `.env` (e.g. `http://192.168.1.5:5173` if accessing via IP). Ensure the backend is running and `VITE_API_URL` in frontend `.env.production` matches it.
+
 ### Environment (backend)
 
 | Variable | Description |
@@ -44,6 +58,7 @@ Hit http://localhost:5173. API calls are proxied to `http://127.0.0.1:8000`.
 | `OPENAI_API_KEY` | Single OpenAI API key. Get one at https://platform.openai.com/api-keys |
 | `OPENAI_API_KEYS` | Comma-separated list of keys. On 401/429, tries the next key. Overrides `OPENAI_API_KEY` if set. |
 | `MONGODB_URL` | MongoDB connection string; defaults to `mongodb://localhost:27017`. |
+| `CORS_ORIGINS` | Comma-separated frontend URLs (e.g. `http://localhost:5173,https://app.example.com`). |
 | `OPENAI_MODEL` | Optional; defaults to `gpt-4o-mini`. |
 
 ## How to use it
