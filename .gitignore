@@ -11,6 +11,9 @@ node_modules
 dist
 dist-ssr
 
+# Nginx (server-specific config)
+nginx/
+
 # Logs and misc
 *.log
 .DS_Store
