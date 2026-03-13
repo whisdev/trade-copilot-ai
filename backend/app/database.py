@@ -1,36 +1,20 @@
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from sqlalchemy.orm import DeclarativeBase
+from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 from app.config import settings
 
-# SQLite needs timeout to avoid "database is locked" during long LLM calls
-_connect_args = {}
-if "sqlite" in settings.database_url:
-    _connect_args["timeout"] = 60
-
-engine = create_async_engine(
-    settings.database_url,
-    echo=False,
-    connect_args=_connect_args,
-)
-async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-
-
-class Base(DeclarativeBase):
-    pass
+_client: AsyncIOMotorClient | None = None
+_db: AsyncIOMotorDatabase | None = None
 
 
 async def init_db():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    global _client, _db
+    _client = AsyncIOMotorClient(settings.mongodb_url)
+    _db = _client.get_default_database(default="trade_copilot")
+    # Ensure indexes for common queries
+    await _db.chats.create_index([("social", 1), ("channel_type", 1), ("username", 1)])
+    await _db.messages.create_index([("chat_id", 1), ("created_at", 1)])
 
 
-async def get_db():
-    async with async_session() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-        finally:
-            await session.close()
+async def get_db() -> AsyncIOMotorDatabase:
+    if _db is None:
+        raise RuntimeError("Database not initialized. Call init_db() first.")
+    return _db

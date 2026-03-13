@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 import httpx
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.ext.asyncio import AsyncSession
+from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel
 
 from app.database import get_db, init_db
@@ -34,23 +34,17 @@ class ChatCreate(BaseModel):
 
 
 class ChatItem(BaseModel):
-    id: int
+    id: str
     social: str
     channel_type: str
     username: str
 
-    class Config:
-        from_attributes = True
-
 
 class MessageItem(BaseModel):
-    id: int
+    id: str
     role: str
     content: str
     attract_score: int | None
-
-    class Config:
-        from_attributes = True
 
 
 class ChatUpdate(BaseModel):
@@ -68,19 +62,19 @@ class SendMessageResponse(BaseModel):
 
 # --- Routes ---
 @app.get("/chats", response_model=list[ChatItem])
-async def list_chats(db: AsyncSession = Depends(get_db)):
+async def list_chats(db: AsyncIOMotorDatabase = Depends(get_db)):
     chats = await get_chats(db)
     return chats
 
 
 @app.post("/chats", response_model=ChatItem)
-async def new_chat(body: ChatCreate, db: AsyncSession = Depends(get_db)):
+async def new_chat(body: ChatCreate, db: AsyncIOMotorDatabase = Depends(get_db)):
     chat = await create_chat(db, body.social, body.channel_type, body.username)
     return chat
 
 
 @app.get("/chats/{chat_id}", response_model=ChatItem)
-async def get_chat(chat_id: int, db: AsyncSession = Depends(get_db)):
+async def get_chat(chat_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
     chat = await get_chat_by_id(db, chat_id)
     if not chat:
         raise HTTPException(404, "Chat not found")
@@ -88,7 +82,7 @@ async def get_chat(chat_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @app.patch("/chats/{chat_id}", response_model=ChatItem)
-async def update_chat(chat_id: int, body: ChatUpdate, db: AsyncSession = Depends(get_db)):
+async def update_chat(chat_id: str, body: ChatUpdate, db: AsyncIOMotorDatabase = Depends(get_db)):
     if not body.username or not body.username.strip():
         raise HTTPException(400, "Username cannot be empty")
     chat = await update_chat_username(db, chat_id, body.username.strip())
@@ -98,7 +92,7 @@ async def update_chat(chat_id: int, body: ChatUpdate, db: AsyncSession = Depends
 
 
 @app.delete("/chats/{chat_id}")
-async def remove_chat(chat_id: int, db: AsyncSession = Depends(get_db)):
+async def remove_chat(chat_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
     chat = await get_chat_by_id(db, chat_id)
     if not chat:
         raise HTTPException(404, "Chat not found")
@@ -109,7 +103,7 @@ async def remove_chat(chat_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @app.get("/chats/{chat_id}/messages", response_model=list[MessageItem])
-async def list_messages(chat_id: int, db: AsyncSession = Depends(get_db)):
+async def list_messages(chat_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
     chat = await get_chat_by_id(db, chat_id)
     if not chat:
         raise HTTPException(404, "Chat not found")
@@ -119,22 +113,19 @@ async def list_messages(chat_id: int, db: AsyncSession = Depends(get_db)):
 
 @app.post("/chats/{chat_id}/send", response_model=SendMessageResponse)
 async def send_message(
-    chat_id: int,
+    chat_id: str,
     body: SendMessageRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     chat = await get_chat_by_id(db, chat_id)
     if not chat:
         raise HTTPException(404, "Chat not found")
-    # Persist user message and commit to release DB lock before long LLM call
     await add_message(db, chat_id, "user", body.content)
-    await db.commit()
-    # Build history for LLM (system injected in llm.chat_completion)
     messages = await get_messages(db, chat_id)
-    history = [{"role": m.role, "content": m.content} for m in messages]
+    history = [{"role": m["role"], "content": m["content"]} for m in messages]
     try:
         assistant_content = await chat_completion(
-            history, chat.social, chat.channel_type
+            history, chat["social"], chat["channel_type"]
         )
         score = await score_attractiveness(body.content, assistant_content)
     except ValueError as e:
@@ -143,9 +134,8 @@ async def send_message(
         if e.response.status_code == 401:
             raise HTTPException(
                 503,
-                "OpenRouter API key invalid. Set OPENROUTER_API_KEY in backend/.env (get one at https://openrouter.ai/keys)",
+                "OpenAI API key invalid. Set OPENAI_API_KEY in backend/.env (get one at https://platform.openai.com/api-keys)",
             )
         raise HTTPException(503, f"Chutes error: {e.response.text[:200]}")
-    # Persist assistant message with score
     await add_message(db, chat_id, "assistant", assistant_content, attract_score=score)
     return SendMessageResponse(assistant_message=assistant_content, attract_score=score)

@@ -1,58 +1,108 @@
-from sqlalchemy import delete, select
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.models import Chat, Message
+from datetime import datetime
+from bson import ObjectId
+from motor.motor_asyncio import AsyncIOMotorDatabase
 
 
-async def create_chat(db: AsyncSession, social: str, channel_type: str, username: str) -> Chat:
-    chat = Chat(social=social, channel_type=channel_type, username=username)
-    db.add(chat)
-    await db.flush()
-    await db.refresh(chat)
-    return chat
-
-
-async def get_chats(db: AsyncSession) -> list[Chat]:
-    r = await db.execute(select(Chat).order_by(Chat.social, Chat.channel_type, Chat.username))
-    return list(r.scalars().all())
-
-
-async def get_chat_by_id(db: AsyncSession, chat_id: int) -> Chat | None:
-    r = await db.execute(select(Chat).where(Chat.id == chat_id))
-    return r.scalar_one_or_none()
-
-
-async def get_messages(db: AsyncSession, chat_id: int) -> list[Message]:
-    r = await db.execute(
-        select(Message).where(Message.chat_id == chat_id).order_by(Message.created_at)
-    )
-    return list(r.scalars().all())
-
-
-async def update_chat_username(db: AsyncSession, chat_id: int, username: str) -> Chat | None:
-    chat = await get_chat_by_id(db, chat_id)
-    if not chat:
+def _doc_to_chat(doc: dict) -> dict:
+    if not doc:
         return None
-    chat.username = username.strip()
-    await db.flush()
-    await db.refresh(chat)
-    return chat
+    return {
+        "id": str(doc["_id"]),
+        "social": doc["social"],
+        "channel_type": doc["channel_type"],
+        "username": doc["username"],
+    }
 
 
-async def delete_chat(db: AsyncSession, chat_id: int) -> bool:
-    await db.execute(delete(Message).where(Message.chat_id == chat_id))
-    result = await db.execute(delete(Chat).where(Chat.id == chat_id))
-    return result.rowcount > 0
+def _doc_to_message(doc: dict) -> dict:
+    if not doc:
+        return None
+    return {
+        "id": str(doc["_id"]),
+        "role": doc["role"],
+        "content": doc["content"],
+        "attract_score": doc.get("attract_score"),
+    }
+
+
+async def create_chat(db: AsyncIOMotorDatabase, social: str, channel_type: str, username: str) -> dict:
+    now = datetime.utcnow()
+    doc = {
+        "social": social,
+        "channel_type": channel_type,
+        "username": username,
+        "created_at": now,
+        "updated_at": now,
+    }
+    r = await db.chats.insert_one(doc)
+    doc["_id"] = r.inserted_id
+    return _doc_to_chat(doc)
+
+
+async def get_chats(db: AsyncIOMotorDatabase) -> list[dict]:
+    cursor = db.chats.find().sort([("social", 1), ("channel_type", 1), ("username", 1)])
+    return [_doc_to_chat(d) async for d in cursor]
+
+
+async def get_chat_by_id(db: AsyncIOMotorDatabase, chat_id: str) -> dict | None:
+    try:
+        oid = ObjectId(chat_id)
+    except Exception:
+        return None
+    doc = await db.chats.find_one({"_id": oid})
+    return _doc_to_chat(doc)
+
+
+async def get_messages(db: AsyncIOMotorDatabase, chat_id: str) -> list[dict]:
+    try:
+        oid = ObjectId(chat_id)
+    except Exception:
+        return []
+    cursor = db.messages.find({"chat_id": oid}).sort("created_at", 1)
+    return [_doc_to_message(d) async for d in cursor]
+
+
+async def update_chat_username(db: AsyncIOMotorDatabase, chat_id: str, username: str) -> dict | None:
+    try:
+        oid = ObjectId(chat_id)
+    except Exception:
+        return None
+    r = await db.chats.find_one_and_update(
+        {"_id": oid},
+        {"$set": {"username": username.strip(), "updated_at": datetime.utcnow()}},
+        return_document=True,
+    )
+    return _doc_to_chat(r) if r else None
+
+
+async def delete_chat(db: AsyncIOMotorDatabase, chat_id: str) -> bool:
+    try:
+        oid = ObjectId(chat_id)
+    except Exception:
+        return False
+    await db.messages.delete_many({"chat_id": oid})
+    r = await db.chats.delete_one({"_id": oid})
+    return r.deleted_count > 0
 
 
 async def add_message(
-    db: AsyncSession,
-    chat_id: int,
+    db: AsyncIOMotorDatabase,
+    chat_id: str,
     role: str,
     content: str,
     attract_score: int | None = None,
-) -> Message:
-    msg = Message(chat_id=chat_id, role=role, content=content, attract_score=attract_score)
-    db.add(msg)
-    await db.flush()
-    await db.refresh(msg)
-    return msg
+) -> dict:
+    try:
+        oid = ObjectId(chat_id)
+    except Exception:
+        raise ValueError("Invalid chat_id")
+    doc = {
+        "chat_id": oid,
+        "role": role,
+        "content": content,
+        "attract_score": attract_score,
+        "created_at": datetime.utcnow(),
+    }
+    r = await db.messages.insert_one(doc)
+    doc["_id"] = r.inserted_id
+    return _doc_to_message(doc)
